@@ -330,6 +330,13 @@
   letter-spacing: 0;
 }
 
+/* 未单独标 mark 的 ruby：基字下默认暖色线（JSON 只有假名标注时也有「下面有颜色」） */
+.jlp-jp ruby.jlp-jp-ruby:not(.jlp-mark) {
+  text-decoration: underline solid 0.15em;
+  text-underline-offset: 0.34em;
+  text-decoration-color: rgba(195, 155, 55, 0.58);
+}
+
 .jlp-romaji {
   margin-top: 4px;
   font-size: 12px;

@@ -1,4 +1,4 @@
-import type { SubtitlePart, SubtitleSegment } from './types'
+import type { SubtitleMark, SubtitlePart, SubtitleSegment } from './types'
 
 /** 与 public/transcript_segments.json 对齐 */
 export const TRANSCRIPT_SEGMENTS_URL = '/transcript_segments.json'
@@ -12,8 +12,37 @@ export type TranscriptJsonRow = {
   romaji?: string | null
 }
 
+/** 从元素 class / data-jlp-mark 读取高亮类型（可与 JSON 里 HTML 混用） */
+function readMarkFromElement(el: Element): SubtitleMark | undefined {
+  const data = el.getAttribute('data-jlp-mark')?.trim()
+  if (
+    data === 'marker' ||
+    data === 'underline-yellow' ||
+    data === 'underline-blue'
+  ) {
+    return data
+  }
+  const cls = el.getAttribute('class') || ''
+  if (/\bjlp-mark--marker\b|\bmarker\b/.test(cls)) return 'marker'
+  if (/\bjlp-mark--underline-yellow\b|\bunderline-yellow\b/.test(cls)) {
+    return 'underline-yellow'
+  }
+  if (/\bjlp-mark--underline-blue\b|\bunderline-blue\b/.test(cls)) {
+    return 'underline-blue'
+  }
+  return undefined
+}
+
+function pickMark(
+  own: SubtitleMark | undefined,
+  inherited: SubtitleMark | undefined,
+): SubtitleMark | undefined {
+  return own ?? inherited
+}
+
 /**
  * 将 `ja_ruby_html`（片段 HTML，含 `<ruby>汉字<rt>かな</rt></ruby>`）解析为 `SubtitlePart[]`。
+ * 支持在标签上加高亮：`class="jlp-mark--marker"` 或 `data-jlp-mark="underline-yellow"` 等。
  * 仅在浏览器环境调用（依赖 DOMParser）。
  */
 export function parseJaRubyHtml(html: string): SubtitlePart[] {
@@ -33,33 +62,47 @@ export function parseJaRubyHtml(html: string): SubtitlePart[] {
 
   const parts: SubtitlePart[] = []
 
-  const pushText = (raw: string) => {
+  const pushText = (raw: string, mark?: SubtitleMark) => {
     const t = raw.replace(/\u00a0/g, ' ')
-    if (t) parts.push({ text: t })
+    if (!t) return
+    const p: SubtitlePart = mark ? { text: t, mark } : { text: t }
+    parts.push(p)
   }
 
-  const walk = (node: Node) => {
+  const walk = (node: Node, inherited?: SubtitleMark) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      pushText(node.textContent ?? '')
+      pushText(node.textContent ?? '', inherited)
       return
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return
 
     const el = node as HTMLElement
-    if (el.tagName === 'RUBY') {
+    const tag = el.tagName.toUpperCase()
+    if (tag === 'SCRIPT' || tag === 'STYLE') return
+
+    if (tag === 'RUBY') {
       const rt = el.querySelector('rt')?.textContent?.trim() ?? ''
       const clone = el.cloneNode(true) as HTMLElement
       clone.querySelectorAll('rt, rp').forEach((n) => n.remove())
       const base = clone.textContent ?? ''
       const surface = base || (el.textContent ?? '')
-      parts.push(rt ? { text: surface, ruby: rt } : { text: surface })
+      const mark = pickMark(readMarkFromElement(el), inherited)
+      const piece: SubtitlePart = rt
+        ? mark
+          ? { text: surface, ruby: rt, mark }
+          : { text: surface, ruby: rt }
+        : mark
+          ? { text: surface, mark }
+          : { text: surface }
+      parts.push(piece)
       return
     }
 
-    el.childNodes.forEach(walk)
+    const next = pickMark(readMarkFromElement(el), inherited)
+    el.childNodes.forEach((ch) => walk(ch, next))
   }
 
-  root.childNodes.forEach(walk)
+  root.childNodes.forEach((n) => walk(n, undefined))
   return parts.length > 0 ? parts : [{ text: trimmed }]
 }
 

@@ -44,17 +44,18 @@ function renderPart(
   index: number,
   showFurigana: boolean,
 ) {
-  const cls = part.mark ? `jlp-mark jlp-mark--${part.mark}` : undefined
+  const markCls = part.mark ? `jlp-mark jlp-mark--${part.mark}` : undefined
   if (showFurigana && part.ruby) {
+    const rubyCls = [markCls, 'jlp-jp-ruby'].filter(Boolean).join(' ')
     return (
-      <ruby key={index} className={cls}>
+      <ruby key={index} className={rubyCls || undefined}>
         {part.text}
         <rt>{part.ruby}</rt>
       </ruby>
     )
   }
   return (
-    <span key={index} className={cls}>
+    <span key={index} className={markCls}>
       {part.text}
     </span>
   )
