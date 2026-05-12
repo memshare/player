@@ -9,13 +9,13 @@
   --jlp-accent: #8fbc7a;
   --jlp-card: #ebe8dc;
   --jlp-radius: 14px;
+  --jlp-video-h: 550px;
   --jlp-font: system-ui, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic UI', YuGothic,
     Meiryo, sans-serif;
 
   display: flex;
   gap: 20px;
-  align-items: stretch;
-  min-height: min(720px, calc(100vh - 48px));
+  align-items: flex-start;
   width: 100%;
   max-width: 1280px;
   margin: 0 auto;
@@ -37,8 +37,8 @@
 }
 
 .jlp-video-wrap {
-  flex: 1;
-  min-height: 280px;
+  flex: 0 0 auto;
+  height: var(--jlp-video-h);
   background: #1a1c16;
   border-radius: var(--jlp-radius);
   overflow: hidden;
@@ -144,6 +144,9 @@
   flex: 0 0 34%;
   max-width: 420px;
   min-width: 260px;
+  height: var(--jlp-video-h);
+  min-height: var(--jlp-video-h);
+  max-height: var(--jlp-video-h);
   display: flex;
   flex-direction: column;
   background: var(--jlp-paper);
@@ -163,11 +166,22 @@
 
 .jlp-list {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.jlp-ts {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--jlp-olive);
+  margin-bottom: 6px;
+  opacity: 0.92;
 }
 
 .jlp-row {
@@ -265,5 +279,7 @@
     flex: 1 1 auto;
     max-width: none;
     min-height: 240px;
+    height: auto;
+    max-height: none;
   }
 }

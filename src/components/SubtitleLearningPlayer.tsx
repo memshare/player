@@ -45,6 +45,22 @@ function formatClock(sec: number) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+/** 字幕列表用：带十分位，与分段数据里的小数秒对齐 */
+function formatSegmentTc(sec: number) {
+  if (!Number.isFinite(sec) || sec < 0) sec = 0
+  const m = Math.floor(sec / 60)
+  const s = sec - m * 60
+  const rounded = Math.round(s * 10) / 10
+  const intPart = Math.floor(rounded + 1e-6)
+  const frac = Math.round((rounded - intPart) * 10)
+  if (frac === 0) return `${m}:${String(intPart).padStart(2, '0')}`
+  return `${m}:${String(intPart).padStart(2, '0')}.${frac}`
+}
+
+function formatSegmentRange(start: number, end: number) {
+  return `${formatSegmentTc(start)} – ${formatSegmentTc(end)}`
+}
+
 export type SubtitleLearningPlayerProps = {
   segments?: SubtitleSegment[]
   videoSrc?: string
@@ -215,6 +231,9 @@ export function SubtitleLearningPlayer({
                 className={`jlp-row${isActive ? ' jlp-row--active' : ''}`}
                 onClick={() => seekTo(seg.start)}
               >
+                <div className="jlp-ts" aria-label="本段起止时间">
+                  {formatSegmentRange(seg.start, seg.end)}
+                </div>
                 <div className="jlp-jp">{seg.parts.map(renderPart)}</div>
                 <div className="jlp-romaji">{seg.romaji}</div>
                 <div className="jlp-zh">{seg.translationZh}</div>
