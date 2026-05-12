@@ -14,16 +14,35 @@ const VIDEO_SRC = '/v.mp4'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5] as const
 
-function pickActiveSegment(
-  segments: SubtitleSegment[],
-  t: number,
-): SubtitleSegment | null {
-  return segments.find((s) => t >= s.start && t < s.end) ?? null
+const SETTINGS_STORAGE_KEY = 'jlp-display-settings'
+
+function loadDisplaySettings(): {
+  showRomaji: boolean
+  showFurigana: boolean
+} {
+  if (typeof localStorage === 'undefined') {
+    return { showRomaji: true, showFurigana: true }
+  }
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (!raw) return { showRomaji: true, showFurigana: true }
+    const o = JSON.parse(raw) as Record<string, unknown>
+    return {
+      showRomaji: o.showRomaji !== false,
+      showFurigana: o.showFurigana !== false,
+    }
+  } catch {
+    return { showRomaji: true, showFurigana: true }
+  }
 }
 
-function renderPart(part: SubtitlePart, index: number) {
+function renderPart(
+  part: SubtitlePart,
+  index: number,
+  showFurigana: boolean,
+) {
   const cls = part.mark ? `jlp-mark jlp-mark--${part.mark}` : undefined
-  if (part.ruby) {
+  if (showFurigana && part.ruby) {
     return (
       <ruby key={index} className={cls}>
         {part.text}
@@ -36,6 +55,13 @@ function renderPart(part: SubtitlePart, index: number) {
       {part.text}
     </span>
   )
+}
+
+function pickActiveSegment(
+  segments: SubtitleSegment[],
+  t: number,
+): SubtitleSegment | null {
+  return segments.find((s) => t >= s.start && t < s.end) ?? null
 }
 
 function formatClock(sec: number) {
@@ -78,6 +104,55 @@ export function SubtitleLearningPlayer({
   const [duration, setDuration] = useState(0)
   const [paused, setPaused] = useState(true)
   const [speedIdx, setSpeedIdx] = useState(1)
+  const [showRomaji, setShowRomaji] = useState(
+    () => loadDisplaySettings().showRomaji,
+  )
+  const [showFurigana, setShowFurigana] = useState(
+    () => loadDisplaySettings().showFurigana,
+  )
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsWrapRef = useRef<HTMLDivElement>(null)
+  const uiHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [forceUi, setForceUi] = useState(false)
+
+  const bumpTouchUi = useCallback(() => {
+    setForceUi(true)
+    if (uiHideTimerRef.current) clearTimeout(uiHideTimerRef.current)
+    uiHideTimerRef.current = setTimeout(() => {
+      setForceUi(false)
+      uiHideTimerRef.current = null
+    }, 3200)
+  }, [])
+
+  const onVideoWrapPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.pointerType === 'mouse') return
+      bumpTouchUi()
+    },
+    [bumpTouchUi],
+  )
+
+  useEffect(() => {
+    if (settingsOpen) {
+      if (uiHideTimerRef.current) {
+        clearTimeout(uiHideTimerRef.current)
+        uiHideTimerRef.current = null
+      }
+      setForceUi(true)
+      return
+    }
+    if (uiHideTimerRef.current) clearTimeout(uiHideTimerRef.current)
+    uiHideTimerRef.current = setTimeout(() => {
+      setForceUi(false)
+      uiHideTimerRef.current = null
+    }, 2200)
+  }, [settingsOpen])
+
+  useEffect(() => {
+    return () => {
+      if (uiHideTimerRef.current) clearTimeout(uiHideTimerRef.current)
+    }
+  }, [])
 
   const active = useMemo(
     () => pickActiveSegment(segments, currentTime),
@@ -101,6 +176,30 @@ export function SubtitleLearningPlayer({
     if (!v) return
     v.playbackRate = SPEEDS[speedIdx]
   }, [speedIdx])
+
+  useEffect(() => {
+    if (typeof localStorage === 'undefined') return
+    try {
+      localStorage.setItem(
+        SETTINGS_STORAGE_KEY,
+        JSON.stringify({ showRomaji, showFurigana }),
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [showRomaji, showFurigana])
+
+  useEffect(() => {
+    if (!settingsOpen) return
+    const close = (e: MouseEvent) => {
+      const el = settingsWrapRef.current
+      if (el && e.target instanceof Node && !el.contains(e.target)) {
+        setSettingsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [settingsOpen])
 
   useEffect(() => {
     const id = active?.id
@@ -150,7 +249,10 @@ export function SubtitleLearningPlayer({
   return (
     <div className="jlp">
       <div className="jlp-main">
-        <div className="jlp-video-wrap">
+        <div
+          className={`jlp-video-wrap${forceUi ? ' jlp-video-wrap--force-ui' : ''}`}
+          onPointerDown={onVideoWrapPointerDown}
+        >
           <video
             ref={videoRef}
             className="jlp-video"
@@ -162,57 +264,108 @@ export function SubtitleLearningPlayer({
             onPlay={() => setPaused(false)}
             onPause={() => setPaused(true)}
           />
-        </div>
 
-        <div className="jlp-controls">
-          <div
-            className="jlp-progress"
-            onPointerDown={(e) => {
-              ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
-              onProgressPointer(e)
-            }}
-            onPointerMove={(e) => {
-              if (e.buttons !== 1) return
-              onProgressPointer(e)
-            }}
-            role="slider"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(progress * 100)}
-            aria-label="播放进度"
-          >
-            <div className="jlp-progress-track" />
+          <div className="jlp-controls">
             <div
-              className="jlp-progress-fill"
-              style={{ width: `${progress * 100}%` }}
-            />
-            <div
-              className="jlp-progress-thumb"
-              style={{ left: `${progress * 100}%` }}
-            />
-          </div>
+              className="jlp-progress"
+              onPointerDown={(e) => {
+                bumpTouchUi()
+                ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
+                onProgressPointer(e)
+              }}
+              onPointerMove={(e) => {
+                if (e.buttons !== 1) return
+                onProgressPointer(e)
+              }}
+              role="slider"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progress * 100)}
+              aria-label="播放进度"
+            >
+              <div className="jlp-progress-track" />
+              <div
+                className="jlp-progress-fill"
+                style={{ width: `${progress * 100}%` }}
+              />
+              <div
+                className="jlp-progress-thumb"
+                style={{ left: `${progress * 100}%` }}
+              />
+            </div>
 
-          <div className="jlp-controls-row">
-            <span className="jlp-time">
-              {formatClock(currentTime)} / {formatClock(duration)}
-            </span>
-            <div className="jlp-actions">
-              <button
-                type="button"
-                className="jlp-icon-btn"
-                onClick={togglePlay}
-                aria-label={paused ? '播放' : '暂停'}
-              >
-                {paused ? '▶' : '❚❚'}
-              </button>
-              <button
-                type="button"
-                className="jlp-icon-btn"
-                onClick={cycleSpeed}
-                title="播放速度"
-              >
-                {SPEEDS[speedIdx]}×
-              </button>
+            <div className="jlp-controls-row">
+              <span className="jlp-time">
+                {formatClock(currentTime)} / {formatClock(duration)}
+              </span>
+              <div className="jlp-actions">
+                <button
+                  type="button"
+                  className="jlp-icon-btn"
+                  onClick={() => {
+                    bumpTouchUi()
+                    togglePlay()
+                  }}
+                  aria-label={paused ? '播放' : '暂停'}
+                >
+                  {paused ? '▶' : '❚❚'}
+                </button>
+                <button
+                  type="button"
+                  className="jlp-icon-btn"
+                  onClick={() => {
+                    bumpTouchUi()
+                    cycleSpeed()
+                  }}
+                  title="播放速度"
+                >
+                  {SPEEDS[speedIdx]}×
+                </button>
+                <div className="jlp-settings-wrap" ref={settingsWrapRef}>
+                  <button
+                    type="button"
+                    className="jlp-icon-btn"
+                    aria-expanded={settingsOpen}
+                    aria-haspopup="dialog"
+                    aria-controls="jlp-settings-panel"
+                    onClick={() => {
+                      bumpTouchUi()
+                      setSettingsOpen((o) => !o)
+                    }}
+                  >
+                    设置
+                  </button>
+                  {settingsOpen ? (
+                    <div
+                      id="jlp-settings-panel"
+                      className="jlp-settings-panel"
+                      role="dialog"
+                      aria-label="字幕显示设置"
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <div className="jlp-settings-title">字幕显示</div>
+                      <label className="jlp-setting-row">
+                        <span className="jlp-setting-label">罗马音标注</span>
+                        <input
+                          type="checkbox"
+                          className="jlp-setting-toggle"
+                          checked={showRomaji}
+                          onChange={(e) => setShowRomaji(e.target.checked)}
+                        />
+                      </label>
+                      <label className="jlp-setting-row">
+                        <span className="jlp-setting-label">汉字假名标注</span>
+                        <input
+                          type="checkbox"
+                          className="jlp-setting-toggle"
+                          checked={showFurigana}
+                          onChange={(e) => setShowFurigana(e.target.checked)}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -234,8 +387,12 @@ export function SubtitleLearningPlayer({
                 <div className="jlp-ts" aria-label="本段起止时间">
                   {formatSegmentRange(seg.start, seg.end)}
                 </div>
-                <div className="jlp-jp">{seg.parts.map(renderPart)}</div>
-                <div className="jlp-romaji">{seg.romaji}</div>
+                <div className="jlp-jp">
+                  {seg.parts.map((p, i) => renderPart(p, i, showFurigana))}
+                </div>
+                {showRomaji ? (
+                  <div className="jlp-romaji">{seg.romaji}</div>
+                ) : null}
                 <div className="jlp-zh">{seg.translationZh}</div>
               </button>
             )
