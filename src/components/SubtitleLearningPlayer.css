@@ -1,13 +1,14 @@
 .jlp {
-  --jlp-bg: #f7f7f2;
-  --jlp-paper: #f0efe6;
+  /* 自参考截图取色：页面底 #EEF0E5，字幕区底 #F0F2E5，当前段卡片 #F8FAEF */
+  --jlp-bg: #eef0e5;
+  --jlp-paper: #f0f2e5;
+  --jlp-row-active: #f8faef;
   --jlp-ink: #2c2e24;
   --jlp-muted: #6a6d5e;
   --jlp-olive: #4a5c3a;
   --jlp-sage: #c5d1b8;
   --jlp-sage-dim: #dfe6d4;
   --jlp-accent: #8fbc7a;
-  --jlp-card: #ebe8dc;
   --jlp-radius: 14px;
   --jlp-video-h: 550px;
   --jlp-font: system-ui, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic UI', YuGothic,
