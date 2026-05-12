@@ -1,6 +1,12 @@
 export { SubtitleLearningPlayer } from './SubtitleLearningPlayer'
 export type { SubtitleLearningPlayerProps } from './SubtitleLearningPlayer'
-export { demoSegments } from './demoSegments'
+export {
+  TRANSCRIPT_SEGMENTS_URL,
+  fetchTranscriptSegments,
+  mapTranscriptRows,
+  parseJaRubyHtml,
+} from './demoSegments'
+export type { TranscriptJsonRow } from './demoSegments'
 export type {
   SubtitleMark,
   SubtitlePart,

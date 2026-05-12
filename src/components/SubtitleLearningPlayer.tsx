@@ -6,7 +6,10 @@ import {
   useState,
 } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { demoSegments } from './demoSegments'
+import {
+  TRANSCRIPT_SEGMENTS_URL,
+  fetchTranscriptSegments,
+} from './demoSegments'
 import type { SubtitlePart, SubtitleSegment } from './types'
 import './SubtitleLearningPlayer.css'
 
@@ -88,12 +91,16 @@ function formatSegmentRange(start: number, end: number) {
 }
 
 export type SubtitleLearningPlayerProps = {
+  /** 若传入则不再请求 transcript */
   segments?: SubtitleSegment[]
+  /** 默认 `/transcript_segments.json`（public 目录） */
+  transcriptUrl?: string
   videoSrc?: string
 }
 
 export function SubtitleLearningPlayer({
-  segments = demoSegments,
+  segments: segmentsProp,
+  transcriptUrl = TRANSCRIPT_SEGMENTS_URL,
   videoSrc = VIDEO_SRC,
 }: SubtitleLearningPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -114,6 +121,14 @@ export function SubtitleLearningPlayer({
   const settingsWrapRef = useRef<HTMLDivElement>(null)
   const uiHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [forceUi, setForceUi] = useState(false)
+
+  const [fetchedSegments, setFetchedSegments] = useState<SubtitleSegment[]>([])
+  const [transcriptState, setTranscriptState] = useState<
+    'loading' | 'ok' | 'err'
+  >(() => (segmentsProp !== undefined ? 'ok' : 'loading'))
+  const [transcriptError, setTranscriptError] = useState<string | null>(null)
+
+  const segments = segmentsProp ?? fetchedSegments
 
   const bumpTouchUi = useCallback(() => {
     setForceUi(true)
@@ -158,6 +173,36 @@ export function SubtitleLearningPlayer({
     () => pickActiveSegment(segments, currentTime),
     [segments, currentTime],
   )
+
+  useEffect(() => {
+    if (segmentsProp !== undefined) {
+      setTranscriptState('ok')
+      setTranscriptError(null)
+      return
+    }
+    let cancelled = false
+    setTranscriptState('loading')
+    setTranscriptError(null)
+    fetchTranscriptSegments(transcriptUrl)
+      .then((rows) => {
+        if (!cancelled) {
+          setFetchedSegments(rows)
+          setTranscriptState('ok')
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setFetchedSegments([])
+          setTranscriptError(
+            e instanceof Error ? e.message : String(e ?? '加载失败'),
+          )
+          setTranscriptState('err')
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [segmentsProp, transcriptUrl])
 
   const onTimeUpdate = useCallback(() => {
     const v = videoRef.current
@@ -374,6 +419,12 @@ export function SubtitleLearningPlayer({
       <aside className="jlp-side" aria-label="字幕列表">
         <header className="jlp-side-head">字幕</header>
         <div ref={listRef} className="jlp-list">
+          {transcriptState === 'loading' ? (
+            <p className="jlp-list-status">加载字幕中…</p>
+          ) : null}
+          {transcriptState === 'err' && transcriptError ? (
+            <p className="jlp-list-status jlp-list-status--err">{transcriptError}</p>
+          ) : null}
           {segments.map((seg) => {
             const isActive = active?.id === seg.id
             return (
@@ -390,7 +441,7 @@ export function SubtitleLearningPlayer({
                 <div className="jlp-jp">
                   {seg.parts.map((p, i) => renderPart(p, i, showFurigana))}
                 </div>
-                {showRomaji ? (
+                {showRomaji && seg.romaji?.trim() ? (
                   <div className="jlp-romaji">{seg.romaji}</div>
                 ) : null}
                 <div className="jlp-zh">{seg.translationZh}</div>

@@ -1,101 +1,99 @@
-import type { SubtitleSegment } from './types'
+import type { SubtitlePart, SubtitleSegment } from './types'
 
-/** 演示用分段字幕（时间单位为秒，可按实际视频长度调整） */
-export const demoSegments: SubtitleSegment[] = [
-  {
-    id: '1',
-    start: 0,
-    end: 4.2,
-    parts: [
-      { text: 'みなさん、' },
-      { text: '今日', ruby: 'きょう', mark: 'marker' },
-      { text: 'は' },
-      { text: '日本語', ruby: 'にほんご', mark: 'underline-yellow' },
-      { text: 'の' },
-      { text: '練習', ruby: 'れんしゅう', mark: 'underline-blue' },
-      { text: 'をしましょう。' },
-    ],
-    romaji: 'minasan, kyō wa nihongo no renshū o shimashō.',
-    translationZh: '大家好，今天一起来练习日语吧。',
-  },
-  {
-    id: '2',
-    start: 4.2,
-    end: 8.5,
-    parts: [
-      { text: 'まずは' },
-      { text: '発音', ruby: 'はつおん', mark: 'marker' },
-      { text: 'から' },
-      { text: '丁寧', ruby: 'ていねい', mark: 'underline-yellow' },
-      { text: 'に' },
-      { text: '聞いて', ruby: 'きいて', mark: 'underline-blue' },
-      { text: 'ください。' },
-    ],
-    romaji: 'mazu wa hatsuon kara teinei ni kiite kudasai.',
-    translationZh: '先从发音开始，请仔细听。',
-  },
-  {
-    id: '3',
-    start: 8.5,
-    end: 12.8,
-    parts: [
-      { text: '文法', ruby: 'ぶんぽう', mark: 'marker' },
-      { text: 'は' },
-      { text: '少し', ruby: 'すこし', mark: 'underline-yellow' },
-      { text: 'ずつ' },
-      { text: '覚え', ruby: 'おぼえ', mark: 'underline-blue' },
-      { text: 'ていけば' },
-      { text: '大丈夫', ruby: 'だいじょうぶ', mark: 'underline-yellow' },
-      { text: 'です。' },
-    ],
-    romaji: 'bunpō wa sukoshi zutsu oboete ikeba daijōbu desu.',
-    translationZh: '语法可以一点点记，没问题的。',
-  },
-  {
-    id: '4',
-    start: 12.8,
-    end: 17,
-    parts: [
-      { text: 'この' },
-      { text: '動画', ruby: 'どうが', mark: 'marker' },
-      { text: 'では' },
-      { text: '実際', ruby: 'じっさい', mark: 'underline-blue' },
-      { text: 'の' },
-      { text: '会話', ruby: 'かいわ', mark: 'underline-yellow' },
-      { text: 'も' },
-      { text: '練習', ruby: 'れんしゅう', mark: 'marker' },
-      { text: 'します。' },
-    ],
-    romaji: 'kono dōga de wa jissai no kaiwa mo renshū shimasu.',
-    translationZh: '本视频里也会练习真实对话。',
-  },
-  {
-    id: '5',
-    start: 17,
-    end: 21.5,
-    parts: [
-      { text: 'わからない', mark: 'underline-yellow' },
-      { text: 'ところが' },
-      { text: 'あれば' },
-      { text: '何度', ruby: 'なんど', mark: 'marker' },
-      { text: 'でも' },
-      { text: '聞いて', ruby: 'きいて', mark: 'underline-blue' },
-      { text: 'くださいね。' },
-    ],
-    romaji: 'wakaranai tokoro ga areba nando demo kiite kudasai ne.',
-    translationZh: '有不懂的地方，多听几遍也没关系。',
-  },
-  {
-    id: '6',
-    start: 21.5,
-    end: 26,
-    parts: [
-      { text: 'それでは' },
-      { text: '、' },
-      { text: '始', ruby: 'はじ', mark: 'marker' },
-      { text: 'めましょう！' },
-    ],
-    romaji: 'sore de wa, hajimemashō!',
-    translationZh: '那么，我们开始吧！',
-  },
-]
+/** 与 public/transcript_segments.json 对齐 */
+export const TRANSCRIPT_SEGMENTS_URL = '/transcript_segments.json'
+
+export type TranscriptJsonRow = {
+  start: number
+  end: number
+  ja: string
+  ja_ruby_html?: string | null
+  zh: string
+  romaji?: string | null
+}
+
+/**
+ * 将 `ja_ruby_html`（片段 HTML，含 `<ruby>汉字<rt>かな</rt></ruby>`）解析为 `SubtitlePart[]`。
+ * 仅在浏览器环境调用（依赖 DOMParser）。
+ */
+export function parseJaRubyHtml(html: string): SubtitlePart[] {
+  const trimmed = html?.trim()
+  if (!trimmed) return []
+
+  if (typeof DOMParser === 'undefined') {
+    return [{ text: trimmed }]
+  }
+
+  const doc = new DOMParser().parseFromString(
+    `<div id="jlp-ruby-root">${trimmed}</div>`,
+    'text/html',
+  )
+  const root = doc.getElementById('jlp-ruby-root')
+  if (!root) return [{ text: trimmed }]
+
+  const parts: SubtitlePart[] = []
+
+  const pushText = (raw: string) => {
+    const t = raw.replace(/\u00a0/g, ' ')
+    if (t) parts.push({ text: t })
+  }
+
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      pushText(node.textContent ?? '')
+      return
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return
+
+    const el = node as HTMLElement
+    if (el.tagName === 'RUBY') {
+      const rt = el.querySelector('rt')?.textContent?.trim() ?? ''
+      const clone = el.cloneNode(true) as HTMLElement
+      clone.querySelectorAll('rt, rp').forEach((n) => n.remove())
+      const base = clone.textContent ?? ''
+      const surface = base || (el.textContent ?? '')
+      parts.push(rt ? { text: surface, ruby: rt } : { text: surface })
+      return
+    }
+
+    el.childNodes.forEach(walk)
+  }
+
+  root.childNodes.forEach(walk)
+  return parts.length > 0 ? parts : [{ text: trimmed }]
+}
+
+export function mapTranscriptRows(rows: TranscriptJsonRow[]): SubtitleSegment[] {
+  return rows.map((row, i) => {
+    const html = row.ja_ruby_html
+    const parts: SubtitlePart[] =
+      html != null && String(html).trim()
+        ? parseJaRubyHtml(String(html))
+        : row.ja
+          ? [{ text: row.ja }]
+          : []
+
+    return {
+      id: String(i + 1),
+      start: row.start,
+      end: row.end,
+      parts: parts.length > 0 ? parts : row.ja ? [{ text: row.ja }] : [{ text: '' }],
+      romaji: typeof row.romaji === 'string' ? row.romaji : '',
+      translationZh: row.zh,
+    }
+  })
+}
+
+export async function fetchTranscriptSegments(
+  url: string = TRANSCRIPT_SEGMENTS_URL,
+): Promise<SubtitleSegment[]> {
+  const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`字幕请求失败 ${res.status}`)
+  }
+  const data: unknown = await res.json()
+  if (!Array.isArray(data)) {
+    throw new Error('字幕 JSON 须为数组')
+  }
+  return mapTranscriptRows(data as TranscriptJsonRow[])
+}
